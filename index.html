@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Spell It Out — a volume dial that only understands words</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --void: #07070d;
+    --parchment: #f0ead9;
+    --parchment-dim: #9b93a8;
+    --amber: #e0a83f;
+    --nebula: #7c5cd9;
+    --nebula-hot: #c15fd6;
+    --teal: #4d9a94;
+    --rust: #c1462f;
+    --line: rgba(240, 234, 217, 0.14);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--void);
+    color: var(--parchment);
+    font-family: 'Space Grotesk', sans-serif;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  canvas#sky {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    display: block;
+  }
+
+  .stage {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 20px 60px;
+  }
+
+  .inner {
+    width: 100%;
+    max-width: 460px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--teal);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0 0 6px;
+    text-align: center;
+    letter-spacing: -0.01em;
+    text-shadow: 0 0 24px rgba(124, 92, 217, 0.35);
+  }
+
+  .sub {
+    color: var(--parchment-dim);
+    font-size: 14px;
+    text-align: center;
+    max-width: 340px;
+    line-height: 1.5;
+    margin: 0 0 36px;
+  }
+
+  /* --- Dial --- */
+  .dial-wrap {
+    position: relative;
+    width: 320px;
+    max-width: 90vw;
+    aspect-ratio: 2 / 1.15;
+    margin-bottom: 8px;
+    filter: drop-shadow(0 0 22px rgba(124, 92, 217, 0.25));
+  }
+
+  svg { width: 100%; height: 100%; overflow: visible; }
+
+  .track {
+    fill: none;
+    stroke: var(--line);
+    stroke-width: 12;
+    stroke-linecap: round;
+  }
+
+  .fill {
+    fill: none;
+    stroke: url(#gaugeGradient);
+    stroke-width: 12;
+    stroke-linecap: round;
+    transition: stroke-dasharray 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .tick {
+    stroke: var(--parchment-dim);
+    stroke-width: 2;
+    opacity: 0.4;
+  }
+
+  .needle {
+    transform-origin: 160px 160px;
+    transition: transform 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .needle-line {
+    stroke: var(--parchment);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+  }
+
+  .needle-hub {
+    fill: var(--amber);
+    filter: drop-shadow(0 0 6px var(--amber));
+  }
+
+  .readout {
+    position: absolute;
+    bottom: 4%;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+  }
+
+  .readout .num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 46px;
+    font-weight: 600;
+    color: var(--amber);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 18px rgba(224, 168, 63, 0.4);
+  }
+
+  .readout .label {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--parchment-dim);
+    margin-top: 2px;
+  }
+
+  /* --- Input --- */
+  .input-row {
+    width: 100%;
+    margin-top: 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  input[type="text"] {
+    width: 100%;
+    max-width: 340px;
+    background: rgba(20, 18, 30, 0.65);
+    backdrop-filter: blur(6px);
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 17px;
+    color: var(--parchment);
+    outline: none;
+    text-align: center;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    letter-spacing: 0.01em;
+  }
+
+  input[type="text"]::placeholder {
+    color: var(--parchment-dim);
+    opacity: 0.7;
+  }
+
+  input[type="text"]:focus {
+    border-color: var(--nebula);
+    box-shadow: 0 0 0 3px rgba(124, 92, 217, 0.18);
+  }
+
+  input.error {
+    border-color: var(--rust);
+  }
+
+  .status {
+    font-size: 13px;
+    height: 18px;
+    text-align: center;
+    color: var(--parchment-dim);
+  }
+
+  .status.ok { color: var(--teal); }
+  .status.bad { color: var(--rust); }
+
+  .audio-note {
+    margin-top: 20px;
+    font-size: 12px;
+    color: var(--parchment-dim);
+    text-align: center;
+    line-height: 1.6;
+    max-width: 320px;
+  }
+
+  .audio-note code {
+    background: rgba(20, 18, 30, 0.65);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--parchment);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fill, .needle { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="sky"></canvas>
+
+<div class="stage">
+  <div class="inner">
+    <div class="eyebrow">No sliders allowed</div>
+    <h1>Spell It Out</h1>
+    <p class="sub">Type your volume in words. Not "45" — <em>forty-five</em>. The signal won't move for anything else.</p>
+
+    <div class="dial-wrap">
+      <svg viewBox="0 0 320 190">
+        <defs>
+          <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#7c5cd9" />
+            <stop offset="60%" stop-color="#c15fd6" />
+            <stop offset="100%" stop-color="#e0a83f" />
+          </linearGradient>
+        </defs>
+        <path class="track" d="M 20 160 A 140 140 0 0 1 300 160" />
+        <path class="fill" id="fillArc" d="M 20 160 A 140 140 0 0 1 300 160"
+              stroke-dasharray="0 440" />
+        <g id="ticks"></g>
+        <g class="needle" id="needle">
+          <line class="needle-line" x1="160" y1="160" x2="160" y2="42" />
+          <circle class="needle-hub" cx="160" cy="160" r="6" />
+        </g>
+      </svg>
+
+      <div class="readout">
+        <div class="num" id="numOut">0</div>
+        <div class="label" id="wordOut">silence</div>
+      </div>
+    </div>
+
+    <div class="input-row">
+      <input
+        type="text"
+        id="wordInput"
+        placeholder="e.g. seventy-two"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+      />
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="audio-note">
+      Works for anything from <code>zero</code> to <code>one hundred</code>.
+      Tap anywhere once to let the ambience play — browsers require a click before sound starts.
+    </div>
+  </div>
+</div>
+
+<script>
+  // ======================================================
+  // Word-to-number parser
+  // ======================================================
+  const ONES = {
+    zero:0, one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9,
+    ten:10, eleven:11, twelve:12, thirteen:13, fourteen:14, fifteen:15,
+    sixteen:16, seventeen:17, eighteen:18, nineteen:19
+  };
+  const TENS = {
+    twenty:20, thirty:30, forty:40, fifty:50, sixty:60, seventy:70, eighty:80, ninety:90
+  };
+
+  function wordsToNumber(raw) {
+    if (!raw) return null;
+    const cleaned = raw.trim().toLowerCase().replace(/-/g, ' ').replace(/\s+/g, ' ');
+    if (!cleaned) return null;
+    if (['a hundred', 'one hundred', 'hundred'].includes(cleaned)) return 100;
+
+    const parts = cleaned.split(' ');
+    if (parts.length === 1) {
+      const w = parts[0];
+      if (w in ONES) return ONES[w];
+      if (w in TENS) return TENS[w];
+      return null;
+    }
+    if (parts.length === 2) {
+      const [a, b] = parts;
+      if (a in TENS && b in ONES && ONES[b] < 10) return TENS[a] + ONES[b];
+      return null;
+    }
+    return null;
+  }
+
+  function numberToWords(n) {
+    if (n === 0) return 'zero';
+    if (n === 100) return 'one hundred';
+    const onesRev = Object.entries(ONES).reduce((m,[k,v]) => (m[v]=k, m), {});
+    const tensRev = Object.entries(TENS).reduce((m,[k,v]) => (m[v]=k, m), {});
+    if (n < 20) return onesRev[n];
+    const t = Math.floor(n/10)*10, o = n % 10;
+    return o === 0 ? tensRev[t] : `${tensRev[t]}-${onesRev[o]}`;
+  }
+
+
+  const canvas = document.getElementById('sky');
+  const ctx = canvas.getContext('2d');
+  let stars = [];
+  let W, H, DPR;
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    seedStars();
+  }
+
+  function seedStars() {
+    const count = Math.floor((W * H) / 3200);
+    stars = Array.from({ length: count }, () => ({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: Math.random() * 1.3 + 0.2,
+      baseAlpha: Math.random() * 0.6 + 0.3,
+      twinkleSpeed: Math.random() * 0.015 + 0.004,
+      phase: Math.random() * Math.PI * 2,
+      driftX: (Math.random() - 0.5) * 0.02,
+      driftY: (Math.random() - 0.5) * 0.02
+    }));
+  }
+
+  let nebulaIntensity = 0; // 0..1, driven by volume
+  let targetNebula = 0;
+  let t = 0;
+
+  function draw() {
+    t += 1;
+    ctx.clearRect(0, 0, W, H);
+
+    // base void
+    ctx.fillStyle = '#07070d';
+    ctx.fillRect(0, 0, W, H);
+
+    // nebula glow, smoothly eased toward target
+    nebulaIntensity += (targetNebula - nebulaIntensity) * 0.04;
+    const cx = W * 0.5, cy = H * 0.42;
+    const radius = Math.max(W, H) * (0.35 + nebulaIntensity * 0.25);
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+    grad.addColorStop(0, `rgba(124, 92, 217, ${0.10 + nebulaIntensity * 0.22})`);
+    grad.addColorStop(0.5, `rgba(193, 95, 214, ${0.05 + nebulaIntensity * 0.12})`);
+    grad.addColorStop(1, 'rgba(7,7,13,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // stars
+    for (const s of stars) {
+      s.x += s.driftX;
+      s.y += s.driftY;
+      if (s.x < 0) s.x = W; if (s.x > W) s.x = 0;
+      if (s.y < 0) s.y = H; if (s.y > H) s.y = 0;
+
+      const twinkle = Math.sin(t * s.twinkleSpeed + s.phase) * 0.35 + 0.65;
+      const alpha = s.baseAlpha * twinkle * (0.7 + nebulaIntensity * 0.3);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(240, 234, 217, ${alpha})`;
+      ctx.fill();
+    }
+
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+  draw();
+
+  // ======================================================
+  // Synthesized ambient space drone (Web Audio API)
+  // ======================================================
+  let audioCtx = null;
+  let masterGain = null;
+  let ambienceStarted = false;
+
+  function initAudio() {
+    if (ambienceStarted) return;
+    ambienceStarted = true;
+
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0;
+    masterGain.connect(audioCtx.destination);
+
+    // --- layer 1: detuned low drone pads ---
+    const droneFreqs = [55, 55.6, 82.4]; // A1, slightly detuned, E2 fifth
+    droneFreqs.forEach((freq, i) => {
+      const osc = audioCtx.createOscillator();
+      osc.type = i === 2 ? 'triangle' : 'sine';
+      osc.frequency.value = freq;
+
+      const oscGain = audioCtx.createGain();
+      oscGain.gain.value = i === 2 ? 0.05 : 0.1;
+
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 800;
+
+      osc.connect(filter).connect(oscGain).connect(masterGain);
+      osc.start();
+    });
+
+    // --- layer 2: filtered noise shimmer ---
+    const bufferSize = audioCtx.sampleRate * 2;
+    const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * 0.3;
+
+    const noiseSource = audioCtx.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+    noiseSource.loop = true;
+
+    const noiseFilter = audioCtx.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.value = 1800;
+    noiseFilter.Q.value = 0.6;
+
+    const noiseGain = audioCtx.createGain();
+    noiseGain.gain.value = 0.04;
+
+    // slow LFO sweeping the noise filter for a "twinkling" astral feel
+    const lfo = audioCtx.createOscillator();
+    lfo.frequency.value = 0.03;
+    const lfoGain = audioCtx.createGain();
+    lfoGain.gain.value = 900;
+    lfo.connect(lfoGain).connect(noiseFilter.frequency);
+    lfo.start();
+
+    noiseSource.connect(noiseFilter).connect(noiseGain).connect(masterGain);
+    noiseSource.start();
+  }
+
+  function setAmbienceVolume(value01) {
+    if (!masterGain) return;
+    const now = audioCtx.currentTime;
+    masterGain.gain.cancelScheduledValues(now);
+    masterGain.gain.linearRampToValueAtTime(value01 * 0.6, now + 0.5);
+  }
+
+  document.body.addEventListener('click', initAudio, { once: true });
+  document.body.addEventListener('touchstart', initAudio, { once: true });
+
+  // ======================================================
+  // Dial rendering + wiring it all together
+  // ======================================================
+  const ARC_LENGTH = 440;
+  const fillArc = document.getElementById('fillArc');
+  const needle = document.getElementById('needle');
+  const numOut = document.getElementById('numOut');
+  const wordOut = document.getElementById('wordOut');
+  const ticksGroup = document.getElementById('ticks');
+  const input = document.getElementById('wordInput');
+  const status = document.getElementById('status');
+
+  function polar(cx, cy, r, angleDeg) {
+    const a = (angleDeg * Math.PI) / 180;
+    return { x: cx + r * Math.cos(a), y: cy - r * Math.sin(a) };
+  }
+
+  for (let v = 0; v <= 100; v += 10) {
+    const angle = 180 - (v / 100) * 180;
+    const outer = polar(160, 160, 140, angle);
+    const inner = polar(160, 160, 126, angle);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', outer.x);
+    line.setAttribute('y1', outer.y);
+    line.setAttribute('x2', inner.x);
+    line.setAttribute('y2', inner.y);
+    line.setAttribute('class', 'tick');
+    ticksGroup.appendChild(line);
+  }
+
+  let currentValue = 0;
+
+  function setDial(value) {
+    currentValue = value;
+    const pct = value / 100;
+
+    const dashLen = pct * ARC_LENGTH;
+    fillArc.setAttribute('stroke-dasharray', `${dashLen} ${ARC_LENGTH}`);
+
+    const deg = -90 + pct * 180;
+    needle.style.transform = `rotate(${deg}deg)`;
+
+    numOut.textContent = value;
+    wordOut.textContent = value === 0 ? 'silence' : numberToWords(value);
+
+    targetNebula = pct;
+    setAmbienceVolume(pct);
+  }
+
+  setDial(0);
+
+  let debounceTimer = null;
+  input.addEventListener('input', () => {
+    const val = input.value;
+    input.classList.remove('error');
+    clearTimeout(debounceTimer);
+
+    if (!val.trim()) {
+      status.textContent = '';
+      status.className = 'status';
+      return;
+    }
+
+    debounceTimer = setTimeout(() => {
+      const n = wordsToNumber(val);
+      if (n === null) {
+        input.classList.add('error');
+        status.textContent = `not a number I recognize — try spelling it out`;
+        status.className = 'status bad';
+        return;
+      }
+      setDial(n);
+      status.textContent = `signal set to ${n}`;
+      status.className = 'status ok';
+    }, 350);
+  });
+</script>
+
+</body>
+</html>
